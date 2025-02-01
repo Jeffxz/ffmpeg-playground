@@ -50,6 +50,7 @@ void encode_images_to_video(const std::string& folder_path, const std::string& o
     codec_ctx->bit_rate = 400000;
     codec_ctx->width = width;
     codec_ctx->height = height;
+    codec_ctx->sample_rate = fps;
     codec_ctx->time_base = (AVRational){1, fps};
     codec_ctx->framerate = (AVRational){fps, 1};
     codec_ctx->gop_size = 10; // Group of pictures size
