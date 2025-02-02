@@ -17,7 +17,7 @@ static void ppm_save(uint8_t *buf[], int byte_size, int wrap, int width, int hei
     char filename[32];
     int  i;
 
-    sprintf(filename, "%s-%d.ppm", output_filename, iFrame);
+    sprintf(filename, "./images/%08d.ppm", iFrame);
     // sprintf(filename, "%s-%d.raw", output_filename, iFrame);
     f = fopen(filename, "wb");
     if(f==NULL)
