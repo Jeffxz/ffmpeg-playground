@@ -15,11 +15,11 @@ extern "C" {
 
 namespace fs = std::filesystem;
 
-void encode_images_to_video(const std::string& folder_path, const std::string& output_file, int width, int height, int fps) {
+void encode_images_to_video(const std::string& folder_path, const char* output_file, int width, int height, int fps) {
 
     // Create the output format context
     AVFormatContext* format_ctx = nullptr;
-    avformat_alloc_output_context2(&format_ctx, nullptr, nullptr, output_file.c_str());
+    avformat_alloc_output_context2(&format_ctx, nullptr, nullptr, output_file);
     if (!format_ctx) {
         qDebug() << "Could not allocate format context";
         return;
@@ -46,15 +46,21 @@ void encode_images_to_video(const std::string& folder_path, const std::string& o
         qDebug() << "Could not allocate codec context";
         return;
     }
+    AVPacket* packet = av_packet_alloc();
+    if (!packet) {
+        qDebug() << "Could not allocate packet";
+        return;
+    }
+    int frame_duration = 1001;
     codec_ctx->codec_id = codec->id;
-    codec_ctx->bit_rate = 400000;
+    // codec_ctx->bit_rate = 400000;
+    // codec_ctx->bit_rate = 16210421;
     codec_ctx->width = width;
     codec_ctx->height = height;
-    codec_ctx->sample_rate = fps;
-    codec_ctx->time_base = (AVRational){1, fps};
+    codec_ctx->time_base = (AVRational){1, fps * frame_duration};
     codec_ctx->framerate = (AVRational){fps, 1};
-    codec_ctx->gop_size = 10; // Group of pictures size
-    codec_ctx->max_b_frames = 1;
+    // codec_ctx->gop_size = 10; // Group of pictures size
+    // codec_ctx->max_b_frames = 1;
     codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
 
     if (format_ctx->oformat->flags & AVFMT_GLOBALHEADER) {
@@ -74,7 +80,7 @@ void encode_images_to_video(const std::string& folder_path, const std::string& o
 
     // Open output file
     if (!(format_ctx->oformat->flags & AVFMT_NOFILE)) {
-        if (avio_open(&format_ctx->pb, output_file.c_str(), AVIO_FLAG_WRITE) < 0) {
+        if (avio_open(&format_ctx->pb, output_file, AVIO_FLAG_WRITE) < 0) {
             qDebug() << "Could not open output file";
             return;
         }
@@ -102,6 +108,10 @@ void encode_images_to_video(const std::string& folder_path, const std::string& o
     frame->format = AV_PIX_FMT_YUV420P;
     frame->width = width;
     frame->height = height;
+    frame->time_base = codec_ctx->time_base;
+    frame->duration = frame_duration;
+    frame->key_frame = 0;
+
     if (av_frame_get_buffer(frame, 32) < 0) {
         qDebug() << "Could not allocate frame buffer";
         return;
@@ -109,13 +119,17 @@ void encode_images_to_video(const std::string& folder_path, const std::string& o
 
     // Read images from the folder and encode them
     int pts = 0;
-    for (const auto& entry : fs::directory_iterator(folder_path)) {
+    std::set<fs::path> sorted_by_name;
+    for (auto &entry : fs::directory_iterator(folder_path)) {
         if (!entry.is_regular_file()) continue;
+        sorted_by_name.insert(entry.path());
+    }
 
+    for (auto &filename : sorted_by_name) {
         // Load the image using OpenCV
-        cv::Mat img = cv::imread(entry.path().string());
+        cv::Mat img = cv::imread(filename.c_str());
         if (img.empty()) {
-            qDebug() << "Could not read image: " << entry.path().string();
+            qDebug() << "Could not read image: " << filename.c_str();
             continue;
         }
 
@@ -125,43 +139,57 @@ void encode_images_to_video(const std::string& folder_path, const std::string& o
         // Convert the image to YUV420P format
         uint8_t* in_data[1] = { img.data };
         int in_linesize[1] = { static_cast<int>(img.step) };
-        qDebug() << "img.step: " << img.step << "in_linesize: " << in_linesize[0] << "height: " << height << "frame linesize: " << frame->linesize[0];
+        // qDebug() << "img.step: " << img.step << "in_linesize: " << in_linesize[0] << "height: " << height << "frame linesize: " << frame->linesize[0];
         sws_scale(sws_ctx, in_data, in_linesize, 0, height, frame->data, frame->linesize);
 
-        frame->pts = pts++;
-        if (avcodec_send_frame(codec_ctx, frame) < 0) {
+        frame->pts = pts;
+        int ret = avcodec_send_frame(codec_ctx, frame);
+        if (ret < 0) {
             qDebug() << "Error sending frame";
             continue;
         }
 
-        AVPacket pkt = {0};
-        av_init_packet(&pkt);
-        pkt.data = nullptr;
-        pkt.size = 0;
+        pts += frame_duration;
 
-        if (avcodec_receive_packet(codec_ctx, &pkt) == 0) {
-            pkt.stream_index = stream->index;
-            av_packet_rescale_ts(&pkt, codec_ctx->time_base, stream->time_base);
-            av_interleaved_write_frame(format_ctx, &pkt);
-            av_packet_unref(&pkt);
+        while (ret >= 0) {
+            ret = avcodec_receive_packet(codec_ctx, packet);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                continue;
+            }
+            else if (ret < 0) {
+                qDebug() << "Error during encoding";
+                return;
+            }
+            packet->stream_index = stream->index;
+            av_packet_rescale_ts(packet, codec_ctx->time_base, stream->time_base);
+            av_interleaved_write_frame(format_ctx, packet);
+            av_packet_unref(packet);
         }
+
+/*
+        if (avcodec_receive_packet(codec_ctx, packet) == 0) {
+            packet.stream_index = stream->index;
+            av_packet_rescale_ts(&packet, codec_ctx->time_base, stream->time_base);
+            av_interleaved_write_frame(format_ctx, &packet);
+            av_packet_unref(&packet);
+        }
+*/
     }
 
     // Flush the encoder
     avcodec_send_frame(codec_ctx, nullptr);
-    AVPacket pkt = {0};
-    av_init_packet(&pkt);
-    while (avcodec_receive_packet(codec_ctx, &pkt) == 0) {
-        pkt.stream_index = stream->index;
-        av_packet_rescale_ts(&pkt, codec_ctx->time_base, stream->time_base);
-        av_interleaved_write_frame(format_ctx, &pkt);
-        av_packet_unref(&pkt);
+    while (avcodec_receive_packet(codec_ctx, packet) == 0) {
+        packet->stream_index = stream->index;
+        av_packet_rescale_ts(packet, codec_ctx->time_base, stream->time_base);
+        av_interleaved_write_frame(format_ctx, packet);
+        av_packet_unref(packet);
     }
 
     // Write trailer and cleanup
     av_write_trailer(format_ctx);
     sws_freeContext(sws_ctx);
     av_frame_free(&frame);
+    av_packet_free(&packet);
     avcodec_free_context(&codec_ctx);
     if (!(format_ctx->oformat->flags & AVFMT_NOFILE)) {
         avio_closep(&format_ctx->pb);
@@ -176,7 +204,7 @@ int main(int argc, char **argv)
     QCoreApplication app (argc, argv);
     if (argc < 3)
     {
-        av_log(NULL, AV_LOG_ERROR, "Incorrect input\n");
+        qDebug() << "usage: " << argv[0] << "<input image folder> <output video file>\n";
         return 1;
     }
 
