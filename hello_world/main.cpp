@@ -98,12 +98,13 @@ int main(int argc, const char *argv[])
     {
         AVCodecParameters *pLocalCodecParameters = NULL;
         pLocalCodecParameters = pFormatContext->streams[i]->codecpar;
-        logging("AVStream->time_base before open coded %d/%d", pFormatContext->streams[i]->time_base.num, pFormatContext->streams[i]->time_base.den);
-        logging("AVStream->r_frame_rate before open coded %d/%d", pFormatContext->streams[i]->r_frame_rate.num, pFormatContext->streams[i]->r_frame_rate.den);
-        logging("AVStream->start_time %" PRId64, pFormatContext->streams[i]->start_time);
-        logging("AVStream->duration %" PRId64, pFormatContext->streams[i]->duration);
 
         logging("finding the proper decoder (CODEC)");
+        logging("AVStream->time_base before open coded %d/%d", pFormatContext->streams[i]->time_base.num, pFormatContext->streams[i]->time_base.den);
+        logging("AVStream->r_frame_rate before open coded %d/%d", pFormatContext->streams[i]->r_frame_rate.num, pFormatContext->streams[i]->r_frame_rate.den);
+        logging("AVStream->avg_frame_rate before open coded %d/%d", pFormatContext->streams[i]->avg_frame_rate.num, pFormatContext->streams[i]->avg_frame_rate.den);
+        logging("AVStream->start_time %" PRId64, pFormatContext->streams[i]->start_time);
+        logging("AVStream->duration %" PRId64, pFormatContext->streams[i]->duration);
 
         AVCodec *pLocalCodec = NULL;
 
@@ -168,6 +169,16 @@ int main(int argc, const char *argv[])
         logging("failed to open codec through avcodec_open2");
         return -1;
     }
+    logging("codec_id %" PRId64, pCodecContext->codec_id);
+    logging("bit_rate %" PRId64, pCodecContext->bit_rate);
+    logging("width %" PRId64, pCodecContext->width);
+    logging("height %" PRId64, pCodecContext->height);
+    logging("sample_rate %" PRId64, pCodecContext->sample_rate);
+    logging("time_base.num %" PRId64, pCodecContext->time_base.num);
+    logging("time_base.den %" PRId64, pCodecContext->time_base.den);
+    logging("framerate.num %" PRId64, pCodecContext->framerate.num);
+    logging("framerate.den %" PRId64, pCodecContext->framerate.den);
+    logging("pix_fmt %" PRId64, pCodecContext->pix_fmt);
 
     // https://ffmpeg.org/doxygen/trunk/structAVFrame.html
     AVFrame *pFrame = av_frame_alloc();
@@ -199,8 +210,8 @@ int main(int argc, const char *argv[])
             if (response < 0)
                 break;
             // stop it, otherwise we'll be saving hundreds of frames
-            // if (--how_many_packets_to_process <= 0)
-            //     break;
+            if (--how_many_packets_to_process <= 0)
+                break;
         }
         // https://ffmpeg.org/doxygen/trunk/group__lavc__packet.html#ga63d5a489b419bd5d45cfd09091cbcbc2
         av_packet_unref(pPacket);
@@ -267,13 +278,16 @@ static int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFra
           );
             */
             logging(
-                "Frame %d (type=%c, size=%d bytes, format=%d) pts %d key_frame %d",
+                "Frame %d (type=%c, size=%d bytes, format=%d) pts %d key_frame %d duration %d time_base %d",
                 pCodecContext->frame_num,
                 av_get_picture_type_char(pFrame->pict_type),
                 pFrame->pkt_size,
                 pFrame->format,
                 pFrame->pts,
-                pFrame->key_frame);
+                pFrame->key_frame,
+                pFrame->duration,
+                pFrame->time_base
+                );
 
             char frame_filename[1024];
             snprintf(frame_filename, sizeof(frame_filename), "%s-%d.pgm", "frame", pCodecContext->frame_num);

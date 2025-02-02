@@ -165,15 +165,6 @@ void encode_images_to_video(const std::string& folder_path, const char* output_f
             av_interleaved_write_frame(format_ctx, packet);
             av_packet_unref(packet);
         }
-
-/*
-        if (avcodec_receive_packet(codec_ctx, packet) == 0) {
-            packet.stream_index = stream->index;
-            av_packet_rescale_ts(&packet, codec_ctx->time_base, stream->time_base);
-            av_interleaved_write_frame(format_ctx, &packet);
-            av_packet_unref(&packet);
-        }
-*/
     }
 
     // Flush the encoder
