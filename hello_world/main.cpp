@@ -199,8 +199,8 @@ int main(int argc, const char *argv[])
             if (response < 0)
                 break;
             // stop it, otherwise we'll be saving hundreds of frames
-            if (--how_many_packets_to_process <= 0)
-                break;
+            // if (--how_many_packets_to_process <= 0)
+            //     break;
         }
         // https://ffmpeg.org/doxygen/trunk/group__lavc__packet.html#ga63d5a489b419bd5d45cfd09091cbcbc2
         av_packet_unref(pPacket);
@@ -286,7 +286,7 @@ static int decode_packet(AVPacket *pPacket, AVCodecContext *pCodecContext, AVFra
                 logging("Warning: the generated file may not be a grayscale image, but could e.g. be just the R component if the video format is RGB");
             }
             // save a grayscale frame into a .pgm file
-            save_gray_frame(pFrame->data[0], pFrame->linesize[0], pFrame->width, pFrame->height, frame_filename);
+            // save_gray_frame(pFrame->data[0], pFrame->linesize[0], pFrame->width, pFrame->height, frame_filename);
         }
     }
     return 0;
