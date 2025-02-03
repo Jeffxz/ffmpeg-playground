@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 qt_standard_project_setup()
 
+add_subdirectory(copy_audio)
 add_subdirectory(decode_video)
 add_subdirectory(encode_video)
 add_subdirectory(generate_video)
